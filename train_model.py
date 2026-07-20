@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 from tokenizers import ByteLevelBPETokenizer
 
-from cslm_model import CSLMConfig, CSLMModel
+from cslm_model import CSLMConfig, CSLMModel, resolve_torch_device
 
 
 class CorpusDataset(Dataset):
@@ -78,21 +78,26 @@ def train(args: argparse.Namespace) -> None:
     )
 
     dataset = CorpusDataset(token_ids, config.block_size)
+    device = resolve_torch_device(args.device)
+    pin_memory = args.pin_memory and device.type == "cuda"
     loader = DataLoader(
         dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=0,
+        num_workers=args.num_workers,
+        pin_memory=pin_memory,
         drop_last=True,
     )
     print(f"Dataset: {len(dataset):,} samples  |  {len(loader):,} batches/epoch")
 
-    device = torch.device("cpu")
+    print(f"Training device: {device}")
     model = CSLMModel(config).to(device)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model parameters: {n_params:,}")
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
+    use_amp = args.amp and device.type == "cuda"
+    scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
 
     global_step = 0
     t0 = time.time()
@@ -102,13 +107,18 @@ def train(args: argparse.Namespace) -> None:
         epoch_loss = 0.0
 
         for step, (x, y) in enumerate(loader, 1):
-            x, y = x.to(device), y.to(device)
-            _, loss = model(x, y)
+            x = x.to(device, non_blocking=pin_memory)
+            y = y.to(device, non_blocking=pin_memory)
+
+            with torch.autocast(device_type=device.type, enabled=use_amp):
+                _, loss = model(x, y)
 
             optimizer.zero_grad()
-            loss.backward()
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
 
             global_step += 1
             epoch_loss += loss.item()
@@ -152,6 +162,18 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--n-head", type=int, default=4)
     p.add_argument("--n-embd", type=int, default=128)
     p.add_argument("--dropout", type=float, default=0.1)
+    p.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda", "mps"])
+    p.add_argument(
+        "--amp",
+        action="store_true",
+        help="Enable automatic mixed precision on CUDA.",
+    )
+    p.add_argument("--num-workers", type=int, default=2)
+    p.add_argument(
+        "--pin-memory",
+        action="store_true",
+        help="Pin host memory for faster CUDA host->device transfer.",
+    )
     p.add_argument("--log-interval", type=int, default=100)
     p.add_argument("--max-steps", type=int, default=0,
         help="Stop after this many gradient steps (0 = no limit)",
@@ -165,4 +187,3 @@ def parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     train(parse_args())
-

@@ -1,1 +1,4 @@
 path/to/bigfile.ext
+
+.venv/
+__pycache__/

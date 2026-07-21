@@ -14,7 +14,6 @@ from tokenizers import ByteLevelBPETokenizer
 
 from model import GPT
 
-
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("prompt", nargs="?", default="The")

@@ -1,4 +1,8 @@
-path/to/bigfile.ext
-
-.venv/
 __pycache__/
+*.pyc
+.venv/
+
+# training artifacts
+data/
+checkpoints/
+*.pt

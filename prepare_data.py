@@ -11,7 +11,7 @@ VOCAB_SIZE = 16384
 
 def download_wikitext():
     print("downloading WikiText-103...")
-    ds = load_dataset("wikitext", "wikitext-103-raw-v1")
+    ds = load_dataset("Salesforce/wikitext", "wikitext-103-raw-v1")
     print(f"  train: {len(ds['train']):,} | val: {len(ds['validation']):,} | test: {len(ds['test']):,}")
     return ds
 

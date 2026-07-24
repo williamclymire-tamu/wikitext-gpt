@@ -84,7 +84,8 @@ def train(args):
         for x, y in train_loader:
             _, loss = model(x.to(device), y.to(device))
             loss.backward()
-            # TODO: gradient clipping
+            if args.grad_clip > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
             running += loss.item()
@@ -134,4 +135,5 @@ if __name__ == "__main__":
     p.add_argument("--epochs", type=int, default=10)
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--lr", type=float, default=3e-4)
+    p.add_argument("--grad-clip", type=float, default=1.0)
     train(p.parse_args())

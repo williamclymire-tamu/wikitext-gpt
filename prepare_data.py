@@ -26,6 +26,7 @@ def train_tokenizer(ds):
             if text:
                 f.write(text + "\n")
 
+    # byte-pair encoding: iteratively replace the most frequent pair of bytes with a single, unused byte
     tokenizer = ByteLevelBPETokenizer()
     tokenizer.train(
         files=[tmp_path],

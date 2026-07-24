@@ -21,6 +21,7 @@ def main():
     p.add_argument("--tokenizer-dir", default="data/tokenizer")
     p.add_argument("--max-tokens", type=int, default=200)
     p.add_argument("--temperature", type=float, default=0.8)
+    p.add_argument("--top-k", type=int, default=40)
     args = p.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -45,7 +46,12 @@ def main():
     idx = torch.tensor([ids], dtype=torch.long, device=device)
 
     # generate
-    out = model.generate(idx, max_new_tokens=args.max_tokens, temperature=args.temperature)
+    out = model.generate(
+        idx,
+        max_new_tokens=args.max_tokens,
+        temperature=args.temperature,
+        top_k=args.top_k,
+    )
     print(tokenizer.decode(out[0].tolist()))
 
 

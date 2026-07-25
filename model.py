@@ -99,6 +99,8 @@ class GPT(nn.Module):
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
         self.apply(self._init_weights)
+        # tie weights of token embedding and lm head.
+        self.lm_head.weight = self.tok_emb.weight
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
@@ -132,11 +134,17 @@ class GPT(nn.Module):
         return sum(p.numel() for p in self.parameters())
 
     @torch.no_grad()
-    def generate(self, idx, max_new_tokens, temperature=1.0):
+    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):
         for _ in range(max_new_tokens):
             idx_cond = idx[:, -self.config.context_len:]
             logits, _ = self(idx_cond)
             logits = logits[:, -1, :] / max(temperature, 1e-8)
+            if top_k is not None and top_k > 0:
+                # Keep only the top-k candidate tokens before sampling.
+                k = min(top_k, logits.size(-1))
+                values, _ = torch.topk(logits, k)
+                cutoff = values[:, [-1]]
+                logits = logits.masked_fill(logits < cutoff, float("-inf"))
             next_tok = torch.multinomial(F.softmax(logits, dim=-1), num_samples=1)
             idx = torch.cat([idx, next_tok], dim=1)
         return idx

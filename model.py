@@ -99,6 +99,8 @@ class GPT(nn.Module):
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
         self.apply(self._init_weights)
+        # tie weights of token embedding and lm head.
+        self.lm_head.weight = self.tok_emb.weight
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):

@@ -376,7 +376,7 @@ int main(int argc, char** argv) {
     }
 
     if (strcmp(argv[1], "test") == 0) {
-        const char* dir = (argc > 2) ? argv[2] : "test_day1";
+        const char* dir = (argc > 2) ? argv[2] : "test_day1_data";
         int rc = 0;
 
         printf("\n=== Decode Attention Tests ===\n");

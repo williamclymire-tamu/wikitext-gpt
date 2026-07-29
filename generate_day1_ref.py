@@ -101,7 +101,7 @@ def generate_residual_ref(outdir, n, seed):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--outdir', default='test_day1')
+    p.add_argument('--outdir', default='test_day1_data')
     p.add_argument('--seed', type=int, default=42)
     args = p.parse_args()
 

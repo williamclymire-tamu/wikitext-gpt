@@ -8,13 +8,23 @@ A from-scratch fused attention kernel with shared-memory tiling and online strea
 
 | N    | Naive (ms) | Fused (ms) | Speedup |
 |------|-----------|-----------|---------|
-| 128  | 0.3201    | 0.1249    | 2.56x   |
-| 256  | 1.1790    | 0.2512    | 4.69x   |
-| 512  | 2.2910    | 0.8360    | 2.74x   |
-| 1024 | 8.9214    | 3.1359    | 2.84x   |
-| 2048 | 37.0993   | 12.7063   | 2.92x   |
+| 128  | 0.1939    | 0.0759    | 2.56x   |
+| 256  | 0.7145    | 0.2541    | 2.81x   |
+| 512  | 2.4369    | 0.9117    | 2.67x   |
+| 1024 | 9.5288    | 3.3414    | 2.85x   |
+| 2048 | 40.5299   | 13.7816   | 2.94x   |
 
-Correctness verified against PyTorch reference (fp32, allclose atol=1e-5 rtol=1e-4), including non-power-of-two sequence lengths (N=37, 127, 200).
+### Decode (single-query, KV cache)
+
+| seq_len | Decode (ms) |
+|---------|------------|
+| 128     | 0.1197     |
+| 256     | 0.2378     |
+| 512     | 0.4739     |
+| 1024    | 1.3724     |
+| 2048    | 3.2603     |
+
+Correctness verified against PyTorch reference (fp32, allclose atol=1e-5 rtol=1e-4), including non-power-of-two sequence lengths (N=37, 127, 200). Decode, LayerNorm, GELU, and residual add kernels all pass.
 
 ## Architecture
 
@@ -37,32 +47,36 @@ Open `colab.ipynb` in Google Colab with a T4 GPU runtime. It writes all source f
 ### Local / AWS
 
 ```bash
-# Generate PyTorch reference
+# Generate references
 python generate_reference.py
+python generate_day1_ref.py
 
-# Build (detect your GPU arch)
+# Build
 make ARCH=sm_75  # T4
 
 # Test
 ./attention test test_data
+./test_day1 test test_day1_data
 
 # Benchmark
 ./attention bench
+./test_day1 bench
 ```
-
-For AWS with Nsight Compute profiling, see `aws/launch.sh`.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
 | `attention.cuh` | Shared header: CUDA_CHECK, tile defines, kernel declarations, allclose check |
-| `naive_attention.cu` | Three-phase baseline: Q@K^T → softmax → S@V (materializes N x N) |
-| `fused_attention.cu` | Fused tiled kernel with online streaming softmax |
-| `main.cu` | Test driver + benchmark sweep |
-| `generate_reference.py` | PyTorch reference data generator |
+| `naive_attention.cu` | Three-phase baseline: Q@K^T, softmax, S@V (materializes N x N) |
+| `fused_attention.cu` | Fused tiled prefill kernel with online streaming softmax |
+| `fused_attention_decode.cu` | Single-query decode kernel with KV cache + cache append |
+| `elementwise.cuh / .cu` | LayerNorm (warp shuffle), GELU (tanh approx), residual add |
+| `main.cu` | Prefill test driver + benchmark |
+| `test_day1.cu` | Decode + elementwise test driver + decode benchmark |
+| `generate_reference.py` | PyTorch reference for prefill attention |
+| `generate_day1_ref.py` | PyTorch reference for decode, layernorm, gelu, residual |
 | `colab.ipynb` | Self-contained Colab notebook |
-| `aws/` | EC2 provisioning, remote setup, teardown scripts |
 
 ## Limitations
 

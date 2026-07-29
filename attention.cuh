@@ -38,6 +38,17 @@ void fused_attention_cuda(
     const float* Q, const float* K, const float* V, float* O,
     int B, int H, int N, int d, bool causal);
 
+// Single-query decode: Q [B*H, d], K/V cache [B*H, max_seq, d], O [B*H, d]
+void fused_attention_decode_cuda(
+    const float* Q, const float* K_cache, const float* V_cache, float* O,
+    int B, int H, int seq_len, int max_seq, int d);
+
+// Append new K,V row to cache at position pos
+void kv_cache_append_cuda(
+    float* K_cache, float* V_cache,
+    const float* K_new, const float* V_new,
+    int B, int H, int pos, int max_seq, int d);
+
 inline float* load_bin(const char* path, size_t num_floats) {
     FILE* f = fopen(path, "rb");
     if (!f) { fprintf(stderr, "Cannot open %s\n", path); exit(1); }
@@ -51,8 +62,7 @@ inline float* load_bin(const char* path, size_t num_floats) {
     return buf;
 }
 
-// numpy-style allclose: |a-b| <= atol + rtol * |b|
-// Pure relative error blows up near zero; this handles it properly.
+// allclose check: |a-b| <= atol + rtol*|b|  (same as numpy)
 inline bool check(const float* a, const float* b, size_t n,
                   float rtol, const char* label) {
     const float atol = 1e-5f;

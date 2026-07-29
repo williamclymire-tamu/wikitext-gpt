@@ -76,3 +76,7 @@ For AWS with Nsight Compute profiling, see `aws/launch.sh`.
 
 - Dao et al., "FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness" (2022)
 - Milakov & Gimelshein, "Online normalizer calculation for softmax" (2018)
+
+## AI disclosure
+
+AI tools (Claude) were used for some code review, refactoring, documentation, and debugging during development. All architecture, training, and evaluation code was written and is fully understood and explainable by me.

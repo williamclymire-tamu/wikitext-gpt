@@ -26,7 +26,6 @@ __global__ void fused_attention_kernel(
     float row_max = -INFINITY;
     float row_sum = 0.0f;
 
-    // Load Q tile into shared memory
     for (int dd = tx; dd < d; dd += 32) {
         if (q_row < N)
             Q_s[ty][dd] = Q[bh * N * d + q_row * d + dd];
@@ -35,15 +34,13 @@ __global__ void fused_attention_kernel(
     }
     __syncthreads();
 
-    // Loop over K/V tiles
     int num_kv_tiles = cdiv(N, TILE_KV);
     for (int kv_tile = 0; kv_tile < num_kv_tiles; kv_tile++) {
         int kv_start = kv_tile * TILE_KV;
 
-        // Causal early exit: entire KV tile is past the diagonal
+        // early exit: entire tile past the diagonal
         if (causal && kv_start > q_start + TILE_Q - 1) break;
 
-        // Load K tile
         for (int r = ty; r < TILE_KV; r += TILE_Q) {
             int kv_row = kv_start + r;
             for (int dd = tx; dd < d; dd += 32) {
@@ -54,7 +51,6 @@ __global__ void fused_attention_kernel(
             }
         }
 
-        // Load V tile
         for (int r = ty; r < TILE_KV; r += TILE_Q) {
             int kv_row = kv_start + r;
             for (int dd = tx; dd < d; dd += 32) {
@@ -66,7 +62,7 @@ __global__ void fused_attention_kernel(
         }
         __syncthreads();
 
-        // Compute S = Q_s @ K_s^T * scale with warp reduction
+        // S = Q @ K^T * scale (warp reduction per dot product)
         for (int j = 0; j < TILE_KV; j++) {
             int kv_col = kv_start + j;
             float dot = 0.0f;
@@ -85,7 +81,7 @@ __global__ void fused_attention_kernel(
         }
         __syncthreads();
 
-        // Online softmax: find tile max, compute correction
+        // online softmax correction
         float tile_max = -INFINITY;
         if (tx == 0) {
             for (int j = 0; j < TILE_KV; j++)
@@ -108,7 +104,7 @@ __global__ void fused_attention_kernel(
 
         row_sum = row_sum * correction + tile_sum;
 
-        // Rescale accumulator and add P @ V_tile
+        // rescale + accumulate P @ V
         for (int i = 0; i < HEAD_DIM / 32; i++) {
             int dd = tx + i * 32;
             acc[i] *= correction;
@@ -120,7 +116,6 @@ __global__ void fused_attention_kernel(
         __syncthreads();
     }
 
-    // Write output: O = acc / row_sum
     if (q_row < N) {
         float inv_sum = (row_sum > 0.0f) ? (1.0f / row_sum) : 0.0f;
         for (int i = 0; i < HEAD_DIM / 32; i++) {

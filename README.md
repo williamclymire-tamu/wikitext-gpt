@@ -48,11 +48,28 @@ python generate.py "In 1945" --temperature 0.7
 ## Project structure
 
 ```
-prepare_data.py   WikiText-103 download, BPE tokenizer training, tokenization
-model.py          GPT architecture (config, attention, FFN, transformer block)
-train.py          Training loop with validation perplexity tracking
-generate.py       Autoregressive text generation from a saved checkpoint
+prepare_data.py           WikiText-103 download, BPE tokenizer training, tokenization
+model.py                  GPT architecture (config, attention, FFN, transformer block)
+train.py                  Training loop with validation perplexity tracking
+generate.py               Autoregressive text generation from a saved checkpoint
+evaluate.py               Perplexity on a held-out split
+export_weights.py         Checkpoint -> flat fp32 binaries + byte-level token table
+                          + per-stage activation fixtures, for the C++/CUDA engine
+tools/make_test_export.py NumPy-only generator producing the same on-disk format,
+                          so the engine can be brought up without a checkpoint
 ```
+
+## Note on perplexity
+
+Reported perplexity is **token-level over a custom 16,384-entry ByteLevelBPE
+vocabulary**. Published WikiText-103 numbers are word-level and are not directly
+comparable — a smaller vocabulary mechanically lowers token-level perplexity.
+
+## GELU
+
+`FeedForward` uses `F.gelu(..., approximate="tanh")`, which is what GPT-2 shipped
+and what the CUDA elementwise kernel implements. Exact (erf) GELU differs by
+~1e-3, which is enough to fail engine parity for no modeling benefit.
 
 ## Roadmap
 
@@ -65,7 +82,8 @@ Tracking perplexity deltas against the baseline for each change:
 - [ ] Scaled residual initialization
 - [ ] Top-k and nucleus sampling
 - [ ] Mixed precision training (`torch.amp`)
-- [ ] KV cache for generation
+- [x] Weight export to flat fp32 binaries (`export_weights.py`)
+- [x] KV cache for generation — implemented in the C++/CUDA engine, not in `generate.py`
 - [ ] Gradient accumulation
 - [ ] Model scaling experiments (8L/8H/512d, 12L/12H/768d)
 - [ ] `torch.profiler` integration

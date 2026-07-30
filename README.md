@@ -26,6 +26,60 @@ A from-scratch fused attention kernel with shared-memory tiling and online strea
 
 Correctness verified against PyTorch reference (fp32, allclose atol=1e-5 rtol=1e-4), including non-power-of-two sequence lengths (N=37, 127, 200). Decode, LayerNorm, GELU, and residual add kernels all pass.
 
+## Inference engine
+
+The kernels are wired into a standalone C++/CUDA engine that serves a trained
+checkpoint with no Python or PyTorch dependency at runtime.
+
+```
+export_weights.py  ->  export/*.bin        flat fp32, no pickle, no schema
+weights.cu         ->  device upload
+transformer.cu     ->  prefill / decode, KV cache, sampling
+run.cu             ->  parity | generate | bench
+```
+
+**Prefill** runs the tiled fused kernel over the whole prompt with a causal mask.
+**Decode** runs the single-query kernel against a persistent per-layer KV cache
+(`[n_head, max_seq, head_dim]`, contiguous). Dense GEMMs go to cuBLAS; attention,
+LayerNorm, GELU, residual add, and the head-layout transposes are all custom.
+
+### Correctness strategy
+
+There are three implementations of the same forward pass, and each one checks
+the next:
+
+| Implementation | Where | Role |
+|---|---|---|
+| PyTorch (or NumPy) | `export_weights.py` / `tools/make_test_export.py` | writes per-stage fixtures |
+| Scalar C++ (`reference.cpp`) | CPU, double accumulation | the oracle; builds with plain g++ |
+| CUDA (`transformer.cu`) | GPU | the thing being tested |
+
+Fixtures are dumped **per stage** (embedding, each block, final norm, logits), so
+a parity failure names the layer instead of just reporting that the logits are
+wrong. `test_cpu` needs no GPU and no toolkit, so the wiring can be validated
+before any CUDA is involved — and both the CPU and CUDA paths are additionally
+checked for the property that incremental decode through the KV cache reproduces
+a full prefill exactly.
+
+```bash
+# 1. export (from the wikitext-gpt repo)
+python export_weights.py --random          # or omit --random once trained
+
+# 2. validate the wiring on any machine, no GPU required
+make test_cpu && ./test_cpu ../wikitext-gpt/export
+
+# 3. on a GPU box
+make engine HEAD_DIM=64 ARCH=sm_75
+./engine parity   ../wikitext-gpt/export
+./engine generate ../wikitext-gpt/export --ids 464,1092 --tokens 100 --temp 0.8 --top-k 40
+./engine bench    ../wikitext-gpt/export --tokens 256
+```
+
+Tokenizer note: `export_weights.py` inverts GPT-2's byte↔unicode mapping and
+ships a flat raw-byte table, so the C++ side decodes by blob lookup and `fwrite`
+with no unicode handling at all. Encoding stays in Python — the engine takes
+token ids.
+
 ## Architecture
 
 The fused kernel processes attention in tiles without ever materializing the full N x N score matrix in global memory:
@@ -42,7 +96,17 @@ Thread layout: `blockDim=(32, TILE_Q)` — one warp spans the head dimension, on
 
 ### Colab (free, recommended)
 
-Open `colab.ipynb` in Google Colab with a T4 GPU runtime. It writes all source files, builds, tests, and benchmarks in ~5 minutes.
+| Notebook | Purpose |
+|---|---|
+| `colab_engine.ipynb` | Clone, export random weights, CPU validation, build, parity, bench, generate (~10 min, no training) |
+| `colab_train.ipynb` | WikiText-103 training with Drive-backed checkpoints and resume (long-running) |
+
+Both clone the repos rather than pasting sources into `%%writefile` cells.
+
+> `colab.ipynb` is the **original kernel-only notebook** and is superseded. It
+> inlines a copy of every source file, which was tractable at 6 files and is not
+> at 24 — it is already missing `linear.cu` and the whole engine. Kept for
+> reference; use `colab_engine.ipynb`.
 
 ### Local / AWS
 
@@ -77,13 +141,28 @@ make ARCH=sm_75  # T4
 | `generate_reference.py` | PyTorch reference for prefill attention |
 | `generate_day1_ref.py` | PyTorch reference for decode, layernorm, gelu, residual |
 | `colab.ipynb` | Self-contained Colab notebook |
+| **Engine** | |
+| `model_types.h` | CUDA-free struct definitions shared by the CPU and GPU paths |
+| `weights_host.h / .cpp` | config.json parse + `.bin` loading (no CUDA) |
+| `weights.cu` | Host -> device weight upload |
+| `transformer.cuh / .cu` | RunState, KV cache, prefill/decode, head-layout kernels, sampling |
+| `reference.h / .cpp` | Scalar CPU forward pass — the oracle |
+| `detokenizer.h / .cpp` | Raw-byte token table lookup |
+| `run.cu` | Driver: `parity`, `generate`, `bench` |
+| `test_cpu.cpp` | GPU-free harness for the reference and the KV cache |
+| `checks.h` | Shared allclose / argmax verdicts |
 
 ## Limitations
 
 - fp32 only (no fp16/bf16 tensor core path)
 - Forward pass only (no backward)
-- Fixed head dim (HEAD_DIM=64, compile-time)
-- No dropout, no GQA/MQA, no paged KV cache
+- Fixed head dim (HEAD_DIM=64, compile-time; the engine checks this against
+  `config.json` and tells you to rebuild rather than producing garbage)
+- No dropout, no GQA/MQA
+- KV cache is contiguous and single-sequence, not paged; batch size 1
+- Prefill assumes it starts at position 0 (no prefix reuse / chunked prefill)
+- Sampling runs on the host — a 64 KB copy per token, deliberately not optimized
+  until it shows up in a profile
 - Single-kernel design (no split-K for very long sequences)
 
 ## References

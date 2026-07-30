@@ -8,11 +8,15 @@ A from-scratch fused attention kernel with shared-memory tiling and online strea
 
 | N    | Naive (ms) | Fused (ms) | Speedup |
 |------|-----------|-----------|---------|
-| 128  | 0.1939    | 0.0759    | 2.56x   |
-| 256  | 0.7145    | 0.2541    | 2.81x   |
-| 512  | 2.4369    | 0.9117    | 2.67x   |
-| 1024 | 9.5288    | 3.3414    | 2.85x   |
-| 2048 | 40.5299   | 13.7816   | 2.94x   |
+| 128  | 0.2638    | 0.1033    | 2.55x   |
+| 256  | 0.9927    | 0.3382    | 2.94x   |
+| 512  | 2.3262    | 0.8053    | 2.89x   |
+| 1024 | 8.8222    | 3.1242    | 2.82x   |
+| 2048 | 36.7370   | 12.6644   | 2.90x   |
+
+Absolute times vary run to run by 10-30% on a shared Colab T4; the speedup ratio
+is stable to about ±0.1x across runs. One earlier run showed 3.32x at N=256,
+which did not reproduce — treat the 2.5-2.9x band as the claim.
 
 ### Decode (single-query, KV cache)
 
@@ -42,6 +46,26 @@ run.cu             ->  parity | generate | bench
 **Decode** runs the single-query kernel against a persistent per-layer KV cache
 (`[n_head, max_seq, head_dim]`, contiguous). Dense GEMMs go to cuBLAS; attention,
 LayerNorm, GELU, residual add, and the head-layout transposes are all custom.
+
+### Engine results
+
+Serving the trained WikiText-103 checkpoint (4L/4H/256d, 7.42M params, 46.1 val PPL)
+on a Tesla T4:
+
+| Metric | Value |
+|---|---|
+| Decode throughput | **688 tok/s** (1.453 ms/token, batch 1, context 1→255) |
+| Weights loaded | 11.61M fp32 (46.5 MB) |
+| Prefill parity vs PyTorch | max_abs **9.0e-5** on logits, **0/32** argmax mismatches |
+| Scalar CPU reference vs PyTorch | max_abs **1.3e-5** on logits |
+| Decode vs prefill | max_abs **1.4e-5**, 0/32 rows differing |
+
+Parity drift grows smoothly with depth (1.3e-5 → 2.6e-5 → 4.2e-5 → 9.0e-5 across
+the four blocks), which is ordinary fp32 accumulation under `--use_fast_math`, not
+a bug — a real kernel error shows up as a step change at one layer. The large
+*relative* errors on `final_ln` and `logits` (2.1e-1, 3.7e-1) are on
+near-zero-valued elements, which is why the check is `atol`-dominated; argmax
+agreement is the metric that actually matters for sampling.
 
 ### Correctness strategy
 

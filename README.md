@@ -2,6 +2,11 @@
 
 From-scratch GPT-2 style transformer trained on WikiText-103, implemented entirely in PyTorch with no high-level wrappers (no `nn.MultiheadAttention`, no HuggingFace model classes).
 
+> **The C++/CUDA inference engine that serves this model is
+> [wikigpt-engine](https://github.com/williamclymire-tamu/wikigpt-engine)** — fused
+> attention kernel, KV cache, scalar CPU reference, and a stage-by-stage parity harness
+> against the PyTorch forward pass. `export_weights.py` in this repo is the handoff.
+
 ## Architecture
 
 | Component | Detail |

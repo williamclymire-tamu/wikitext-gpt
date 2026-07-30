@@ -63,7 +63,10 @@ class FeedForward(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x):
-        return self.dropout(self.fc2(F.gelu(self.fc1(x))))
+        # approximate="tanh" is what GPT-2 actually shipped, and it is what the
+        # CUDA elementwise kernel implements. Exact (erf) GELU differs by ~1e-3,
+        # which is enough to fail engine parity for no benefit.
+        return self.dropout(self.fc2(F.gelu(self.fc1(x), approximate="tanh")))
 
 
 class TransformerBlock(nn.Module):

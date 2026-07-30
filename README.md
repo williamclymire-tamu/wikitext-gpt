@@ -12,7 +12,12 @@ From-scratch GPT-2 style transformer trained on WikiText-103, implemented entire
 | FFN expansion | 4x |
 | Positional encoding | Learned embeddings |
 
-**Baseline config:** 4 layers, 4 heads, 256-dim embeddings, ~11.6M parameters.
+**Baseline config:** 4 layers, 4 heads, 256-dim embeddings, **7.42M parameters**.
+
+(11.61M *weights* are serialized by `export_weights.py` — the tied embedding is
+written twice, once as `tok_emb` and once as `lm_head`, so the engine does not
+need to know about tying. Parameter count and serialized weight count differ for
+exactly that reason.)
 
 ## Dataset
 
@@ -22,9 +27,16 @@ Tokenized with a ByteLevelBPE tokenizer (vocab size 16,384) trained on the WikiT
 
 ## Results
 
-| Config | Val Perplexity | Notes |
-|---|---|---|
-| Baseline (4L/4H/256d) | — | Fixed LR, no clipping, no weight tying |
+| Config | Val PPL | Test PPL | Notes |
+|---|---|---|---|
+| 4L/4H/256d, 7.42M params | **46.10** | **46.27** | 3 epochs, AdamW 3e-4, grad clip 1.0, weight tying, fp16 AMP |
+
+Tesla T4, batch 32, context 256. ~131k tokens/sec training throughput,
+~935 s/epoch over 122.4M training tokens (14,948 steps/epoch).
+
+Val loss by epoch: 4.047 → 3.895 → 3.831. Still descending at epoch 3, but a
+7.4M-parameter model has seen ~367M tokens by then — well past the ~230M that is
+roughly compute-optimal at this size, so further epochs buy little.
 
 *Table updated as improvements are benchmarked.*
 

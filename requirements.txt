@@ -1,3 +1,8 @@
 torch
-transformers
+datasets
 tokenizers
+numpy
+
+# `datasets` was missing: prepare_data.py calls load_dataset and would fail on a
+# clean install. `transformers` was listed but is not imported anywhere -- the
+# whole point of the project is that no HuggingFace model classes are used.

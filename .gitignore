@@ -7,5 +7,3 @@ data/
 checkpoints/
 *.pt
 
-# reorganization script (one-time use)
-reorganize.sh

@@ -4,6 +4,7 @@ engine
 
 # generated fixtures and exported weights
 test_data/
+test_decode_data/
 export/
 export_test/
 *.bin

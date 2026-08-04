@@ -49,6 +49,11 @@ void kv_cache_append_cuda(
     const float* K_new, const float* V_new,
     int B, int H, int pos, int max_seq, int d);
 
+// ── Utilities used by the standalone kernel tests ────────────────────────────
+// The engine proper uses read_f32() from weights_host.h and check_close() from
+// checks.h instead. These stay here so the kernel tests (test_attention,
+// test_decode) can build without linking weights_host.cpp.
+
 inline float* load_bin(const char* path, size_t num_floats) {
     FILE* f = fopen(path, "rb");
     if (!f) { fprintf(stderr, "Cannot open %s\n", path); exit(1); }

@@ -19,8 +19,6 @@ void cublas_destroy() {
     }
 }
 
-cublasHandle_t cublas_handle() { return g_handle; }
-
 // add bias[N] to every row of Y[M, N]
 __global__ void bias_add_kernel(float* __restrict__ Y, const float* __restrict__ bias,
                                 int M, int N)

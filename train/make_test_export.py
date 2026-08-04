@@ -5,7 +5,7 @@ a trained checkpoint, or even PyTorch installed. The activations it writes into
 parity/ are computed by the NumPy forward pass below, which is a line-for-line
 transcription of model.py.
 
-    python tools/make_test_export.py --out export_test
+    python train/make_test_export.py --out export_test
 
 The engine's scalar CPU reference is checked against these fixtures on any machine;
 the CUDA path is then checked against the same fixtures on a GPU box. Same oracle

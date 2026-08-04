@@ -1,0 +1,8 @@
+# test binaries (built by engine/Makefile)
+test_kernels
+test_cpu
+
+# generated fixture data
+test_data/
+test_decode_data/
+__pycache__/

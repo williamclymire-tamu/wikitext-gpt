@@ -1,8 +1,25 @@
 #pragma once
 
 #include <cstdio>
+#include <cstdlib>
 #include <cmath>
 #include <cstddef>
+
+// ── Binary tensor I/O (used by kernel tests) ────────────────────────────────
+// Inline so the kernel test targets don't need to link weights_host.cpp.
+
+inline float* load_bin(const char* path, size_t num_floats) {
+    FILE* f = fopen(path, "rb");
+    if (!f) { fprintf(stderr, "Cannot open %s\n", path); exit(1); }
+    float* buf = (float*)malloc(num_floats * sizeof(float));
+    size_t nread = fread(buf, sizeof(float), num_floats, f);
+    if (nread != num_floats) {
+        fprintf(stderr, "%s: expected %zu floats, got %zu\n", path, num_floats, nread);
+        exit(1);
+    }
+    fclose(f);
+    return buf;
+}
 
 // numpy-style allclose: |a-b| <= atol + rtol*|b|
 // CUDA-free so both the CPU harness and the GPU harness can share one verdict.

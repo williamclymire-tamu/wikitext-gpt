@@ -5,45 +5,53 @@ HEAD_DIM?= 64
 
 NVCC    = nvcc
 FLAGS   = -O3 -std=c++17 --use_fast_math -arch=$(ARCH) \
-          -DTILE_Q=$(TILE_Q) -DTILE_KV=$(TILE_KV) -DHEAD_DIM=$(HEAD_DIM)
+          -DTILE_Q=$(TILE_Q) -DTILE_KV=$(TILE_KV) -DHEAD_DIM=$(HEAD_DIM) \
+          -Iinclude
 
 CXX      ?= g++
-CXXFLAGS ?= -O2 -std=c++17
+CXXFLAGS ?= -O2 -std=c++17 -Iinclude
 
-SRC_ATTN   = main.cu naive_attention.cu fused_attention.cu
-TARGET_ATTN = attention
+K       = kernels
+R       = runtime
+I       = include
+TESTS   = ../tests
 
-SRC_DAY1    = test_day1.cu fused_attention_decode.cu elementwise.cu
-TARGET_DAY1 = test_day1
+# ── Standalone kernel tests (unified binary) ─────────────────
 
-# Full inference engine: weight loading, forward pass, KV cache, sampling.
-SRC_ENGINE = run.cu transformer.cu weights.cu weights_host.cpp \
-             fused_attention.cu fused_attention_decode.cu \
-             elementwise.cu linear.cu detokenizer.cpp
+SRC_KERNELS  = $(TESTS)/test_kernels.cu \
+               $(K)/naive_attention.cu $(K)/fused_attention.cu \
+               $(K)/fused_attention_decode.cu $(K)/elementwise.cu
+TARGET_KERNELS = $(TESTS)/test_kernels
+
+# ── Full inference engine ─────────────────────────────────────
+
+SRC_ENGINE = run.cu \
+             $(R)/transformer.cu $(R)/weights.cu $(R)/weights_host.cpp \
+             $(K)/fused_attention.cu $(K)/fused_attention_decode.cu \
+             $(K)/elementwise.cu $(K)/linear.cu $(R)/detokenizer.cpp
 TARGET_ENGINE = engine
 
-# CPU-only reference + harness. Builds with plain g++, no toolkit and no GPU,
-# so the forward-pass wiring can be validated anywhere.
-SRC_CPU    = test_cpu.cpp reference.cpp weights_host.cpp
-TARGET_CPU = test_cpu
+# ── CPU-only reference + harness (no GPU, no toolkit) ─────────
 
-all: $(TARGET_ATTN) $(TARGET_DAY1) $(TARGET_ENGINE)
+SRC_CPU    = $(TESTS)/test_cpu.cpp $(R)/reference.cpp $(R)/weights_host.cpp
+TARGET_CPU = $(TESTS)/test_cpu
 
-$(TARGET_ATTN): $(SRC_ATTN) attention.cuh
-	$(NVCC) $(FLAGS) -o $@ $(SRC_ATTN)
+# ──────────────────────────────────────────────────────────────
 
-$(TARGET_DAY1): $(SRC_DAY1) attention.cuh elementwise.cuh
-	$(NVCC) $(FLAGS) -o $@ $(SRC_DAY1)
+all: $(TARGET_KERNELS) $(TARGET_ENGINE)
 
-$(TARGET_ENGINE): $(SRC_ENGINE) attention.cuh elementwise.cuh linear.cuh \
-                  inference.cuh transformer.cuh model_types.h weights_host.h \
-                  detokenizer.h checks.h
+$(TARGET_KERNELS): $(SRC_KERNELS) $(I)/attention.cuh $(I)/elementwise.cuh $(I)/checks.h
+	$(NVCC) $(FLAGS) -o $@ $(SRC_KERNELS)
+
+$(TARGET_ENGINE): $(SRC_ENGINE) $(I)/attention.cuh $(I)/elementwise.cuh $(I)/linear.cuh \
+                  $(I)/inference.cuh $(I)/transformer.cuh $(I)/model_types.h \
+                  $(I)/weights_host.h $(I)/detokenizer.h $(I)/checks.h
 	$(NVCC) $(FLAGS) -o $@ $(SRC_ENGINE) -lcublas
 
-$(TARGET_CPU): $(SRC_CPU) model_types.h weights_host.h reference.h checks.h
+$(TARGET_CPU): $(SRC_CPU) $(I)/model_types.h $(I)/weights_host.h $(I)/reference.h $(I)/checks.h
 	$(CXX) $(CXXFLAGS) -o $@ $(SRC_CPU)
 
 clean:
-	rm -f $(TARGET_ATTN) $(TARGET_DAY1) $(TARGET_ENGINE) $(TARGET_CPU)
+	rm -f $(TARGET_KERNELS) $(TARGET_ENGINE) $(TARGET_CPU)
 
 .PHONY: all clean

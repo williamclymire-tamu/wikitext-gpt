@@ -1,6 +1,5 @@
 # test binaries (built by engine/Makefile)
-test_attention
-test_decode
+test_kernels
 test_cpu
 
 # generated fixture data

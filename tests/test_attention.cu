@@ -1,4 +1,5 @@
 #include "attention.cuh"
+#include "checks.h"
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
@@ -55,13 +56,13 @@ int run_test(const char* data_dir) {
     CUDA_CHECK(cudaMemset(d_O, 0, bytes));
     naive_attention_cuda(d_Q, d_K, d_V, d_O, B, H, N, d, causal);
     CUDA_CHECK(cudaMemcpy(h_O_out, d_O, bytes, cudaMemcpyDeviceToHost));
-    all_pass &= check(h_O_out, h_O_ref, qkv_size, 1e-4f, "naive vs reference");
+    all_pass &= check_close(h_O_out, h_O_ref, qkv_size, "naive", 1e-5f, 1e-4f);
 
     CUDA_CHECK(cudaMemset(d_O, 0, bytes));
     fused_attention_cuda(d_Q, d_K, d_V, d_O, B, H, N, d, causal);
     CUDA_CHECK(cudaDeviceSynchronize());
     CUDA_CHECK(cudaMemcpy(h_O_out, d_O, bytes, cudaMemcpyDeviceToHost));
-    all_pass &= check(h_O_out, h_O_ref, qkv_size, 1e-4f, "fused vs reference");
+    all_pass &= check_close(h_O_out, h_O_ref, qkv_size, "fused", 1e-5f, 1e-4f);
 
     free(h_Q); free(h_K); free(h_V); free(h_O_ref); free(h_O_out);
     CUDA_CHECK(cudaFree(d_Q));

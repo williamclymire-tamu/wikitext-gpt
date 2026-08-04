@@ -1,13 +1,9 @@
-# build artifacts
-attention
-test_day1
+# build artifact
 engine
-test_cpu
 *.o
 
 # generated fixtures and exported weights
 test_data/
-test_day1_data/
 export/
 export_test/
 *.bin

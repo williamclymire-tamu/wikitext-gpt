@@ -6,3 +6,6 @@ __pycache__/
 data/
 checkpoints/
 *.pt
+
+# reorganization script (one-time use)
+reorganize.sh
